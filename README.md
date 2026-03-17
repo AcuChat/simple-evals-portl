@@ -93,24 +93,22 @@ We have implemented sampling interfaces for the following language model APIs:
 
 Make sure to set the `*_API_KEY` environment variables before using these APIs.
 
+## Portl Note
+Make sure you set both the `PORTL_API_URL` and the `PORTL_API_KEY` environment variables.
+
 ## Setup
 
 Due to the optional dependencies, we're not providing a unified setup mechanism. Instead, we're providing instructions for each eval and sampler.
 
-For [HumanEval](https://github.com/openai/human-eval/) (python programming)
+For [HumanEval](https://github.com/openai/human-eval/) (python programming) [use the acuchat forked version which works better with newer python versions]
 ```bash
-git clone https://github.com/openai/human-eval
+git clone https://github.com/AcuChat/human-eval
 pip install -e human-eval
 ```
 
-For the [OpenAI API](https://pypi.org/project/openai/):
-```bash
-pip install openai
-```
-
-For the [Anthropic API](https://docs.anthropic.com/claude/docs/quickstart-guide):
-```bash
-pip install anthropic
+All deps except for HumanEval are now handled by requirements.txt
+```bash 
+pip install -r requirements.txt
 ```
 
 ## Running the evals
@@ -124,6 +122,11 @@ To run the evaluations, you can use the following command:
 python -m simple-evals.simple_evals --model <model_name> --examples <num_examples>
 ```
 This will launch evaluations through the OpenAI API.
+
+To run the portl-cascade endpoint on simpleqa, use the following command: 
+```bash 
+python -m simple-evals-portl.simple_evals --model cascade-portl --eval simpleqa --examples <num_examples>
+```
 
 ## Notes
 
