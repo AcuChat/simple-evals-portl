@@ -21,6 +21,7 @@ from .sampler.chat_completion_sampler import (
     ChatCompletionSampler,
 )
 from .sampler.claude_sampler import ClaudeCompletionSampler, CLAUDE_SYSTEM_MESSAGE_LMSYS
+from .sampler.portl_sampler import PortlCompletionSampler
 from .sampler.o_chat_completion_sampler import OChatCompletionSampler
 from .sampler.responses_sampler import ResponsesSampler
 from .simpleqa_eval import SimpleQAEval
@@ -233,6 +234,7 @@ def main():
         "claude-3-haiku-20240307": ClaudeCompletionSampler(
             model="claude-3-haiku-20240307",
         ),
+        "cascade-portl": PortlCompletionSampler()
     }
 
     if args.list_models:
