@@ -20,7 +20,7 @@ Make sure you set both the `PORTL_API_URL` and the `PORTL_API_KEY` environment v
 cd simle-evals-portl
 ```
 ```bash
-python3 -m venv venv && venv/bin/activate
+python3 -m venv venv && source venv/bin/activate
 ```
 ```bash
 cd ../
@@ -34,7 +34,7 @@ pip install -e human-eval
 
 Now we can install all the packages needed
 ```bash 
-cd simle-evals-portl
+cd simple-evals-portl
 ```
 
 All deps except for HumanEval are now handled by requirements.txt
