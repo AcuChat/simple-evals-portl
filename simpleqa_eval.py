@@ -132,6 +132,7 @@ class SimpleQAEval(Eval):
                 ]
                 sampler_response = sampler(prompt_messages)
                 response_text = sampler_response.response_text
+                portl_meta = sampler_response.response_metadata.get("portlMeta")
                 actual_queried_prompt_messages = sampler_response.actual_queried_message_list
                 grade_letter = self.grade_sample(row.get("problem", ""), row.get("answer", ""), response_text)
                 
@@ -150,13 +151,30 @@ class SimpleQAEval(Eval):
                     correct_answer=row["answer"],
                     extracted_answer=response_text,
                 )
-                convo = actual_queried_prompt_messages + [dict(content=response_text, role="assistant")]
-                return SingleEvalResult(html=html, score=score, convo=convo, metrics={
-                    "is_correct": is_correct,
-                    "is_incorrect": is_incorrect,
-                    "is_not_attempted": is_not_attempted
-                })
+                convo = {
+                    "messages": actual_queried_prompt_messages + [
+                        dict(content=response_text, role="assistant")
+                    ],
+                    "eval": {
+                        "correct_answer": row["answer"],
+                        "extracted_answer": response_text,
+                        "score": score,
+                        "grade": grade_letter,
+                        "question": row.get("problem", "")
+                    },
+                    "portlMeta": portl_meta,
+                }
 
+                return SingleEvalResult(
+                    html=html,
+                    score=score,
+                    convo=convo,
+                    metrics={
+                        "is_correct": is_correct,
+                        "is_incorrect": is_incorrect,
+                        "is_not_attempted": is_not_attempted
+                    }
+                )
             # Run evaluation and collect results
             results = common.map_with_progress(fn, self.examples)
 

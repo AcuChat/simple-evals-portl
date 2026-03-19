@@ -93,6 +93,7 @@ class PortlCompletionSampler(SamplerBase):
                     resp_json.get("response")
                 )
 
+                portl_meta = resp_json.get("portlMeta")
                 if response_text is None:
                     choices = resp_json.get("choices")
                     if choices and isinstance(choices, list):
@@ -121,6 +122,7 @@ class PortlCompletionSampler(SamplerBase):
                         "provider": self.provider,
                         "model": self.model,
                         "raw_response": resp_json,
+                        "portlMeta": portl_meta,
                     },
                     actual_queried_message_list=actual_queried_message_list,
                 )
