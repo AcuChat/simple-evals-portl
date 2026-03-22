@@ -14,7 +14,7 @@ class PortlCompletionSampler(SamplerBase):
         system_message: str | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
-        timeout: int = 300,
+        timeout: int = 1200,
         max_retries: int = 5,
     ):
         self.endpoint_url = os.environ.get(
