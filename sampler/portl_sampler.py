@@ -1,5 +1,6 @@
 import time
 import os
+import threading
 import requests
 
 from ..types import MessageList, SamplerBase, SamplerResponse
@@ -16,10 +17,11 @@ class PortlCompletionSampler(SamplerBase):
         max_tokens: int | None = None,
         timeout: int = 1200,
         max_retries: int = 5,
+        max_concurrent: int = 2,
     ):
         self.endpoint_url = os.environ.get(
             "PORTL_API_URL", "https://api.portl.ai"
-        )+ "/cascade-chat-completion"
+        )+ "/acuweb-completion"
 
         self.api_key = os.environ.get("PORTL_API_KEY")
         if not self.api_key:
@@ -32,6 +34,7 @@ class PortlCompletionSampler(SamplerBase):
         self.timeout = timeout
         self.max_retries = max_retries
         self.image_format = "base64"
+        self._semaphore = threading.Semaphore(max_concurrent) if max_concurrent is not None else None
 
     def _handle_image(
         self,
@@ -58,94 +61,122 @@ class PortlCompletionSampler(SamplerBase):
     def __call__(self, message_list: MessageList) -> SamplerResponse:
         trial = 0
 
-        while True:
-            try:
-                if not common.has_only_user_assistant_messages(message_list):
-                    raise ValueError(
-                        f"Portl sampler only supports user and assistant messages, got {message_list}"
-                    )
-
-                payload = {
-                    "provider": self.provider,
-                    "model": self.model,
-                    "messages": message_list,
-                    "systemPrompt": self.system_message,
-                    "temperature": self.temperature,
-                }
-
-                headers = {"Authorization": f"Bearer {self.api_key}"}
-
-                if self.max_tokens is not None:
-                    payload["max_tokens"] = self.max_tokens
-
-                response = requests.post(
-                    self.endpoint_url,
-                    json=payload,
-                    headers=headers,
-                    timeout=self.timeout,
-                )
-                
-                response.raise_for_status()
-
-                resp_json = response.json()
-
-                response_text = (
-                    resp_json.get("response")
-                )
-
-                portl_meta = resp_json.get("portlMeta")
-                if response_text is None:
-                    choices = resp_json.get("choices")
-                    if choices and isinstance(choices, list):
-                        first = choices[0]
-                        response_text = (
-                            first.get("message", {}).get("content")
-                            or first.get("text")
+        if self._semaphore is not None:
+            self._semaphore.acquire()
+        try:
+            while True:
+                try:
+                    if not common.has_only_user_assistant_messages(message_list):
+                        raise ValueError(
+                            f"Portl sampler only supports user and assistant messages, got {message_list}"
                         )
 
-                if response_text is None:
-                    raise ValueError(
-                        f"Endpoint returned JSON without a recognized response field: {resp_json}"
-                    )
-
-                actual_queried_message_list: MessageList = []
-                if self.system_message:
-                    actual_queried_message_list.append(
-                        {"role": "system", "content": self.system_message}
-                    )
-                actual_queried_message_list.extend(message_list)
-
-                return SamplerResponse(
-                    response_text=response_text,
-                    response_metadata={
-                        "endpoint_used": self.endpoint_url,
+                    payload = {
                         "provider": self.provider,
                         "model": self.model,
-                        "raw_response": resp_json,
-                        "portlMeta": portl_meta,
-                    },
-                    actual_queried_message_list=actual_queried_message_list,
-                )
+                        "messages": message_list,
+                        "systemPrompt": self.system_message,
+                        "temperature": self.temperature,
+                        "api_key": self.api_key
+                    }
 
-            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
-                if trial >= self.max_retries:
+                    headers = {"Authorization": f"Bearer {self.api_key}"}
+
+                    if self.max_tokens is not None:
+                        payload["max_tokens"] = self.max_tokens
+
+                    response = requests.post(
+                        self.endpoint_url,
+                        json=payload,
+                        headers=headers,
+                        timeout=self.timeout,
+                    )
+
+                    response.raise_for_status()
+
+                    resp_json = response.json()
+
+                    response_text = (
+                        resp_json.get("response")
+                    )
+
+                    portl_meta = resp_json.get("portlMeta")
+                    if response_text is None:
+                        choices = resp_json.get("choices")
+                        if choices and isinstance(choices, list):
+                            first = choices[0]
+                            response_text = (
+                                first.get("message", {}).get("content")
+                                or first.get("text")
+                            )
+
+                    if response_text is None:
+                        raise ValueError(
+                            f"Endpoint returned JSON without a recognized response field: {resp_json}"
+                        )
+
+                    actual_queried_message_list: MessageList = []
+                    if self.system_message:
+                        actual_queried_message_list.append(
+                            {"role": "system", "content": self.system_message}
+                        )
+                    actual_queried_message_list.extend(message_list)
+
+                    return SamplerResponse(
+                        response_text=response_text,
+                        response_metadata={
+                            "endpoint_used": self.endpoint_url,
+                            "provider": self.provider,
+                            "model": self.model,
+                            "raw_response": resp_json,
+                            "portlMeta": portl_meta,
+                        },
+                        actual_queried_message_list=actual_queried_message_list,
+                    )
+
+                except requests.exceptions.Timeout as e:
+                    print(f"Request timed out after {self.timeout}s, returning blank response: {e}")
+                    actual_queried_message_list: MessageList = []
+                    if self.system_message:
+                        actual_queried_message_list.append(
+                            {"role": "system", "content": self.system_message}
+                        )
+                    actual_queried_message_list.extend(message_list)
+                    return SamplerResponse(
+                        response_text="",
+                        response_metadata={
+                            "endpoint_used": self.endpoint_url,
+                            "provider": self.provider,
+                            "model": self.model,
+                            "raw_response": None,
+                            "portlMeta": None,
+                            "timed_out": True,
+                        },
+                        actual_queried_message_list=actual_queried_message_list,
+                    )
+
+                except requests.exceptions.ConnectionError as e:
+                    if trial >= self.max_retries:
+                        raise RuntimeError(
+                            f"Portl endpoint failed after {self.max_retries} retries: {e}"
+                        ) from e
+
+                    backoff = 2 ** trial
+                    print(
+                        f"Connection error, retry {trial + 1}/{self.max_retries} after {backoff} sec: {e}"
+                    )
+                    time.sleep(backoff)
+                    trial += 1
+
+                except requests.exceptions.HTTPError as e:
+                    body = None
+                    try:
+                        body = e.response.text
+                    except Exception:
+                        pass
                     raise RuntimeError(
-                        f"Portl endpoint failed after {self.max_retries} retries: {e}"
+                        f"Portl endpoint returned HTTP error: {e}; body={body}"
                     ) from e
-
-                backoff = 2 ** trial
-                print(
-                    f"Connection/timeout error, retry {trial + 1}/{self.max_retries} after {backoff} sec: {e}"
-                )
-                time.sleep(backoff)
-                trial += 1
-
-            except requests.exceptions.HTTPError as e:
-                body = None
-                try:
-                    body = e.response.text
-                except Exception:
-                    pass
-                raise RuntimeError(
-                    f"Portl endpoint returned HTTP error: {e}; body={body}"
-                ) from e
+        finally:
+            if self._semaphore is not None:
+                self._semaphore.release()
